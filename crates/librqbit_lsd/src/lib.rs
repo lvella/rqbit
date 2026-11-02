@@ -260,6 +260,7 @@ cookie: {cookie}\r
             key: (Id20, u64),
             rx: UnboundedReceiver<SocketAddr>,
             lsd: LocalServiceDiscovery,
+            announcer_cancel_token: CancellationToken,
         }
 
         impl Stream for AddrStream {
@@ -275,6 +276,7 @@ cookie: {cookie}\r
 
         impl Drop for AddrStream {
             fn drop(&mut self) {
+                self.announcer_cancel_token.cancel();
                 let _ = self.lsd.inner.receivers.write().remove(&self.key);
             }
         }
@@ -293,12 +295,12 @@ cookie: {cookie}\r
             },
         );
 
+        let cancel_token = self.inner.cancel_token.child_token();
         if let Some(announce_port) = announce_port {
-            let cancel_token = self.inner.cancel_token.child_token();
             spawn_with_cancel(
                 debug_span!(parent: None, "lsd-announce", ?info_hash, port=announce_port),
                 "lsd-announce",
-                cancel_token,
+                cancel_token.clone(),
                 self.clone()
                     .task_announce_periodically(info_hash, announce_port),
             );
@@ -308,6 +310,7 @@ cookie: {cookie}\r
             key,
             rx,
             lsd: self.clone(),
+            announcer_cancel_token: cancel_token,
         }
     }
 }
